@@ -333,3 +333,20 @@ table.data td.cell-school{min-width:170px}
 }
 .auth-inp:focus{outline:none;border-color:var(--primary,#0e7568);box-shadow:0 0 0 3px var(--primary-ghost,rgba(14,117,104,.15))}
 select.auth-inp:disabled{background:var(--surface-2,#f1f5f9);color:var(--muted)}
+
+
+/* =====================================================================
+   v7 — «د جوړونکي په اړه» card (settings)
+   ===================================================================== */
+.dev-card .dev-name{display:flex;flex-direction:column;gap:2px;font-size:18px;font-weight:800;margin-bottom:14px}
+.dev-card .dev-name span{font-size:12.5px;font-weight:600;color:var(--muted)}
+.dev-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.dev-link{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;text-decoration:none;color:inherit;
+  border:1px solid var(--border,#e2e8f0);border-radius:12px;background:var(--surface-2,#f8fafc);min-width:0;
+}
+.dev-link:hover{border-color:var(--primary);background:var(--primary-ghost,#eef7f5)}
+.dev-link>svg{flex:none;width:22px;height:22px;stroke:var(--primary);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.dev-link span{display:flex;flex-direction:column;min-width:0}
+.dev-link small{color:var(--muted);font-size:11.5px;font-weight:700}
+.dev-link b{font-size:14px;overflow-wrap:anywhere;text-align:start}
