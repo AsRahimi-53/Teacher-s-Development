@@ -1,0 +1,130 @@
+/* =====================================================================
+   RESPONSIVE.CSS — layout adaptation for small screens / print preview
+   ===================================================================== */
+
+/* ---------- large desktop: widen grid ---------- */
+@media (min-width:1700px){
+  .view{padding:26px 34px 70px}
+}
+
+/* ---------- tablet ---------- */
+@media (max-width:1180px){
+  .split{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr 1fr}
+  .hbar-row{grid-template-columns:120px 1fr 48px}
+}
+
+/* ---------- sidebar becomes drawer ---------- */
+@media (max-width:980px){
+  :root{--sidebar-w:0px}
+  .main-wrap{margin-inline-start:0}
+  .sidebar{transform:translateX(100%);width:272px;box-shadow:var(--shadow-3)}
+  body.sidebar-open .sidebar{transform:translateX(0)}
+  body.sidebar-open .sidebar-overlay{display:block}
+  .menu-btn{display:inline-flex}
+  .sidebar{height:100vh;height:100dvh;padding-top:env(safe-area-inset-top)}
+  .sidebar-overlay{z-index:60}
+  .form-grid{grid-template-columns:1fr}
+  .form-grid .fspan2{grid-column:span 1}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .detail-grid{grid-template-columns:1fr}
+  .drow.full{grid-column:span 1}
+  .stat-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .global-search input{width:150px}
+  .global-search input:focus{width:200px}
+  .gs-results{width:min(320px,80vw)}
+}
+
+/* ---------- phone: app-style experience ---------- */
+@media (max-width:640px){
+  body{font-size:14px}
+  html{font-size:15px}
+  .view{padding:14px 12px calc(56px + env(safe-area-inset-bottom))}
+  .topbar{padding:0 10px;gap:6px;height:54px;position:sticky;top:0;z-index:40}
+  .crumbs{display:none}
+  .icon-btn{width:40px;height:40px;min-width:40px}
+  .lang-switch button{padding:8px 10px;font-size:12.5px}
+  .page-head{flex-wrap:wrap;gap:10px}
+  .page-head h1{font-size:18px}
+  .page-head .ph-icon{width:40px;height:40px;border-radius:10px}
+  .page-head .ph-actions{margin-inline-start:0;width:100%}
+  .page-head .ph-actions .btn{flex:1;justify-content:center;padding:10px 8px;font-size:13px}
+  .btn{min-height:42px}
+  .btn-sm{min-height:36px}
+  .toolbar{flex-direction:column;align-items:stretch;gap:8px}
+  .toolbar .flt{max-width:none;width:100%}
+  .tabs{gap:0}
+  .tab{padding:11px 13px;font-size:13px}
+  .count-chip{font-size:11.5px}
+  /* tables: scroll horizontally, compact cells */
+  .table-wrap{border:0;box-shadow:none;background:transparent}
+  .table-wrap table{min-width:560px;font-size:13px}
+  .table-wrap th,.table-wrap td{padding:10px 10px}
+  /* forms: no iOS zoom, comfy targets */
+  .form-grid{gap:12px}
+  .form-grid input,.form-grid select,.form-grid textarea{font-size:16px;padding:11px 12px;min-height:44px}
+  .form-grid textarea{min-height:90px}
+  .type-input{font-size:16px;padding:11px 12px}
+  /* modals go full-screen */
+  .modal-overlay{padding:0;display:flex;align-items:stretch;justify-content:center}
+  .modal{max-width:100%;width:100%;max-height:100vh;height:100%;border-radius:0;display:flex;flex-direction:column}
+  .modal-head{padding:14px 14px 10px;padding-top:calc(14px + env(safe-area-inset-top))}
+  .modal-body{padding:14px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .modal-foot{padding:12px 14px calc(12px + env(safe-area-inset-bottom));flex-direction:column;gap:8px}
+  .modal-foot .btn{width:100%}
+  /* dashboard */
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat-card{padding:12px}
+  .stat-card .sc-num{font-size:19px}
+  .hbar-row{grid-template-columns:86px 1fr 40px;gap:6px}
+  .qa-grid{grid-template-columns:repeat(2,1fr)}
+  .qa-item{padding:12px}
+  .official-band{flex-wrap:wrap;gap:8px;padding:14px 12px}
+  .official-band .ob-main{min-width:0}
+  .official-band .ob-sub{font-size:12px}
+  /* print preview inside the app */
+  .pdoc-kv{grid-template-columns:1fr}
+  .pdoc-sigs{grid-template-columns:1fr;gap:26px}
+  .print-preview{padding:18px}
+  .score-table{display:block;overflow-x:auto;white-space:nowrap}
+}
+
+/* ---------- very small phones ---------- */
+@media (max-width:380px){
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .stat-card .sc-num{font-size:17px}
+  .page-head h1{font-size:16.5px}
+  .qa-grid{grid-template-columns:1fr}
+}
+
+/* ---------- landscape phones: keep drawer usable ---------- */
+@media (max-height:480px) and (max-width:900px){
+  .modal{height:100vh}
+  .view{padding-bottom:24px}
+}
+
+/* ---------- very short viewports: smaller modals ---------- */
+@media (max-height:640px){
+  .modal-overlay{padding:12px 10px}
+  .modal{max-height:calc(100vh - 24px)}
+}
+
+/* ---------- Jalali calendar on phones ---------- */
+@media (max-width:640px){
+  .cal-popup{width:calc(100vw - 16px)}
+  .cal-day{padding:11px 0;font-size:14px}
+}
+
+/* ---------- auth screen on phones ---------- */
+@media (max-width:640px){
+  .auth-wrap{padding:20px 12px}
+  .auth-card{max-width:100%}
+  .sync-badge .sync-label{display:none}
+  .sync-badge{padding:5px 7px}
+}
+
+/* ---------- header account chip on phones ---------- */
+@media (max-width:640px){
+  .acct-meta{display:none}
+  .acct-chip{padding:4px 5px}
+}
