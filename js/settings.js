@@ -6,6 +6,16 @@
 (function(){
 'use strict';
 
+/* developer / contact details shown at the bottom of the settings page */
+const DEV={
+  name:'عبدالسلام رحيمي',
+  email:'salamraihan53@gmail.com',
+  whatsapp:'0747844817',
+  whatsappUrl:'https://wa.me/93747844817',
+  telegram:'t.me/YaraanMedia',
+  telegramUrl:'https://t.me/YaraanMedia'
+};
+
 const DEFAULT_CRITERIA = [
   {ps:'د درس چمتووالی', fa:'آمادگی درس'},
   {ps:'د زده کړې موخې', fa:'اهداف یادگیری'},
@@ -342,6 +352,15 @@ Settings.renderPage = async function(id){
           '<button class="btn btn-soft btn-sm" id="ownAdd" style="margin-inline-start:auto">'+U.icon('plus')+U.t('addOwn')+'</button></div>'+
           '<table class="data type-table"><thead><tr><th>'+U.t('pashto')+'</th><th>'+U.t('dari')+'</th><th></th></tr></thead><tbody id="ownBody"></tbody></table></div>'+
       '</div></div>'+
+    '<div class="card mb-3 span-all dev-card"><div class="card-head"><h3>'+U.icon('user')+' '+U.t('aboutDeveloper')+'</h3></div>'+
+      '<div class="card-body">'+
+        '<div class="dev-name">'+U.escapeHtml(DEV.name)+'<span>'+U.t('developerRole')+'</span></div>'+
+        '<div class="dev-links">'+
+          '<a class="dev-link" href="mailto:'+DEV.email+'">'+U.icon('mail')+'<span><small>'+U.t('email')+'</small><b dir="ltr">'+DEV.email+'</b></span></a>'+
+          '<a class="dev-link" href="'+DEV.whatsappUrl+'" target="_blank" rel="noopener">'+U.icon('message')+'<span><small>WhatsApp</small><b dir="ltr">'+DEV.whatsapp+'</b></span></a>'+
+          '<a class="dev-link" href="'+DEV.telegramUrl+'" target="_blank" rel="noopener">'+U.icon('globe')+'<span><small>Telegram</small><b dir="ltr">'+DEV.telegram+'</b></span></a>'+
+        '</div>'+
+      '</div></div>'+
     '</div>';
 
   /* ---- account section: sign-in shortcut ---- */
@@ -475,3 +494,4 @@ function numFld(name,label,val){
 
 window.Settings = Settings;
 })();
+ 
