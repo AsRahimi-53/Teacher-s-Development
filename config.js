@@ -12,9 +12,9 @@
    ===================================================================== */
 window.APP_CONFIG = {
   /* e.g. https://abcdefghijklmnop.supabase.co */
-  supabaseUrl: '',
+  supabaseUrl: 'https://qutmyumsjmtlkotwhbzv.supabase.co',
   /* the public anon key from Supabase → Settings → API */
-  supabaseAnonKey: '',
+  supabaseAnonKey: 'sb_publishable_3nRp0QFIOikJG1l2C6mcYQ_vKdSDqJE',
   /* maximum accounts per district (ولسوالۍ) */
   maxAccountsPerDistrict: 8
 };
