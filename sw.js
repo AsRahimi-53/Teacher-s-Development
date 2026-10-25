@@ -10,7 +10,7 @@
 'use strict';
 
 /* bump VERSION on every release: it renames the caches, the old ones are deleted */
-const VERSION = 'tdp-v8';
+const VERSION = 'tdp-v9';
 const SHELL_CACHE = VERSION + '-shell';
 const RUNTIME_CACHE = VERSION + '-runtime';
 const NET_TIMEOUT = 4000;   // ms — on a slow network fall back to the cached copy
