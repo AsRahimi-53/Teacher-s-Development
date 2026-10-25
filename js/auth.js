@@ -42,7 +42,7 @@ const Auth = {
   errKey(message){
     if(!message) return null;
     if(message.indexOf('DISTRICT_NOT_REGISTERED')>=0 || message.indexOf('PROVINCE_NOT_REGISTERED')>=0) return 'districtNotRegistered';
-    if(message.indexOf('DISTRICT_FULL')>=0) return 'districtFull';
+    if(message.indexOf('DISTRICT_FULL')>=0 || message.indexOf('Database error saving new user')>=0) return 'districtFull';
     if(message.indexOf('DISTRICT_INACTIVE')>=0 || message.indexOf('PROVINCE_INACTIVE')>=0) return 'districtInactive';
     if(message.indexOf('already registered')>=0 || message.indexOf('already in use')>=0) return 'emailTaken';
     if(message.indexOf('Invalid login')>=0 || message.indexOf('invalid credentials')>=0) return 'wrongCreds';
@@ -193,9 +193,10 @@ const Auth = {
     }
     distSel.disabled=false;
     this.setListNote();
+    /* a district that already reached its account limit cannot be chosen */
     distSel.innerHTML='<option value="">'+U.t('selectDistrict')+'</option>'+
-      list.map(d=>'<option value="'+U.escapeHtml(d.name_ps)+'">'+
-        U.escapeHtml(fa?(d.name_fa||d.name_ps):d.name_ps)+'</option>').join('');
+      list.map(d=>'<option value="'+U.escapeHtml(d.name_ps)+'"'+(d.full?' disabled':'')+'>'+
+        U.escapeHtml(fa?(d.name_fa||d.name_ps):d.name_ps)+(d.full?' — '+U.t('districtFullShort'):'')+'</option>').join('');
   },
 
   /* ---------------- actions ---------------- */
@@ -276,13 +277,21 @@ async function ensureAccountMember(profile){
   if(profile.role==='super') return;        // the super admin is not a member of a district
   try{
     const all=await DB.getAll('members');
-    if(all.some(m=>m.accountId===profile.id)) return;
+    /* ONE member per account: deterministic id (two devices can never create two) —
+       any older duplicates are removed (synced) */
+    const mine=all.filter(m=>m.accountId===profile.id);
+    if(mine.length){
+      const fixed='acct_'+profile.id;
+      const keep=mine.find(m=>m.id===fixed) || mine.slice().sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')))[0];
+      for(const m of mine){ if(m.id!==keep.id) await DB.del('members',m.id); }
+      return;
+    }
     /* offline on a fresh device: the member may already exist in the cloud —
        wait for the first pull (Sync.onNetChange calls us again) */
     if(window.Sync && !Sync.isOnline() && !Sync.lastPullAt) return;
     const nowIso=new Date().toISOString();
     await DB.put('members',{
-      id: U.uid(),
+      id: 'acct_'+profile.id,
       fullName: profile.full_name||'',
       fatherName: '',
       position: U.t('scientificMember'),
