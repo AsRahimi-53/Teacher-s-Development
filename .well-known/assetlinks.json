@@ -1,8 +1,8 @@
 [{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "app.netlify.teacher_pd.twa",
-        "sha256_cert_fingerprints": ["0C:AD:52:1C:FB:F2:48:C9:91:39:FC:2F:26:6B:55:09:48:CD:E0:A0:F5:B9:CB:6C:71:92:B2:94:9C:A7:79:C8"]
-      }
-    }]
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.netlify.teacher_pd.twa",
+    "sha256_cert_fingerprints": ["78:93:B2:97:93:0C:B0:40:CA:81:A4:3D:AE:63:29:0B:A0:55:D4:EE:55:86:C1:36:79:A2:E0:7C:97:9A:CD:42"]
+  }
+}]
