@@ -42,6 +42,8 @@ const Auth = {
   errKey(message){
     if(!message) return null;
     if(message.indexOf('DISTRICT_NOT_REGISTERED')>=0 || message.indexOf('PROVINCE_NOT_REGISTERED')>=0) return 'districtNotRegistered';
+    if(message.indexOf('JOIN_CODE_INVALID')>=0) return 'joinCodeInvalid';
+    if(message.indexOf('TOO_MANY_ATTEMPTS')>=0) return 'tooManyAttempts';
     if(message.indexOf('DISTRICT_FULL')>=0 || message.indexOf('Database error saving new user')>=0) return 'districtFull';
     if(message.indexOf('DISTRICT_INACTIVE')>=0 || message.indexOf('PROVINCE_INACTIVE')>=0) return 'districtInactive';
     if(message.indexOf('already registered')>=0 || message.indexOf('already in use')>=0) return 'emailTaken';
@@ -72,7 +74,11 @@ const Auth = {
       '<div class="field"><label>'+U.t('district')+' <span class="req">*</span></label>'+
         '<select id="auDistrict" class="auth-inp" disabled><option value="">'+U.t('selectDistrict')+'</option></select>'+
       '</div>'+
-      '<div class="auth-note" id="auListNote" hidden></div>'
+      '<div class="auth-note" id="auListNote" hidden></div>'+
+      '<div class="field"><label>'+U.t('joinCode')+' <span class="req">*</span></label>'+
+        '<input type="text" id="auJoin" class="auth-inp" dir="ltr" placeholder="XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" enterkeyhint="done">'+
+        '<div class="small muted" style="margin-top:6px">'+U.t('joinCodeHint')+'</div>'+
+      '</div>'
       : '';
     root.innerHTML=
       '<div class="auth-wrap">'+
@@ -98,6 +104,13 @@ const Auth = {
       '</div>';
     root.querySelectorAll('[data-autab]').forEach(b=>{
       b.addEventListener('click', ()=>this.render(b.dataset.autab));
+    });
+    /* the district code is typed in capitals as XXXX-XXXX */
+    const joinInp=root.querySelector('#auJoin');
+    if(joinInp) joinInp.addEventListener('input',()=>{
+      let v=joinInp.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
+      if(v.length>4) v=v.slice(0,4)+'-'+v.slice(4);
+      joinInp.value=v;
     });
     /* offline use: only after an account was created on this device once */
     root.querySelector('[data-auoffline]').addEventListener('click', ()=>this.offlineUse(tab));
@@ -221,7 +234,7 @@ const Auth = {
     const r=await Cloud.register({
       fullName: g('auName'), phone: g('auPhone'),
       email: g('auEmailR'), password: document.getElementById('auPassR').value||'',
-      province: g('auProvince'), district: g('auDistrict')
+      province: g('auProvince'), district: g('auDistrict'), joinCode: g('auJoin')
     });
     this._busy=false; if(btn) btn.disabled=false;
     if(r.needsConfirm){
@@ -237,8 +250,8 @@ const Auth = {
   async enterApp(){
     await Cloud.loadAccount();
     await Cloud.guardDistrict();                /* other district on this phone → wipe old data */
-    if(window.Sync) await Sync.startup();       /* pull FIRST, so the member row is not duplicated */
-    await ensureAccountMember(Cloud.profile);   /* auto-add to علمي غړي */
+    /* sync in the background (a slow connection must not freeze the screen) */
+    if(window.App && App.startBackground) App.startBackground(Cloud.profile);
     this.hide();
     Nav.buildSidebar();
     Nav.applyBrand();
