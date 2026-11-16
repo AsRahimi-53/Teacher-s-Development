@@ -25,6 +25,11 @@ const CFG = window.APP_CONFIG || {};
 
 /* PostgREST returns a many-to-one embed as an OBJECT, a one-to-many embed as an
    ARRAY — accept both so account/district loading never silently yields null */
+/* a network call that gives up after `ms` (a slow / stuck 2G-3G connection must
+   never freeze the app) */
+function withTimeout(p, ms){
+  return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('TIMEOUT')), ms))]);
+}
 function one(x){ return Array.isArray(x) ? (x[0]||null) : (x||null); }
 const CACHE_KEY='tdp_account_cache';
 const LAST_DISTRICT_KEY='tdp_last_district';
@@ -134,13 +139,21 @@ const Cloud = {
     if(!m.province_ps || !m.district_ps || !m.full_name) return false;
     const {error} = await this.client.rpc('complete_registration', {
       p_full_name:m.full_name, p_province_ps:m.province_ps,
-      p_district_ps:m.district_ps, p_phone:m.phone||'', p_max:this.maxAccounts()
+      p_district_ps:m.district_ps, p_join_code:m.join_code||'',
+      p_phone:m.phone||'', p_max:this.maxAccounts()
     });
     return !error;
   },
 
+  /* signed in on this device (session stored locally) but the server is too slow or
+     unreachable → open the app with the cached account instead of waiting */
+  _fallbackCached(){ return this.enterOffline() || null; },
+
   async loadAccount(){
-    const sess = await this.session();
+    let sess=null, slow=false;
+    try{ sess = await withTimeout(this.session(), 6000); }
+    catch(e){ slow=true; }
+    if(slow) return this._fallbackCached();
     if(!sess || !sess.user) return null;
     const q = () => this.client
       .from('profiles')
@@ -148,10 +161,12 @@ const Cloud = {
       .eq('id', sess.user.id)
       .maybeSingle();
     let res;
-    try{ res = await q(); }catch(e){ res = {error:e, data:null}; }
+    try{ res = await withTimeout(q(), 7000); }catch(e){ res = {error:e, data:null}; }
     if(res.error){
       /* network / server problem — NOT a missing profile: fall back to cache */
-      return this._restoreCached(sess.user.id);
+      const c=this._restoreCached(sess.user.id);
+      if(c) this.offline=true;               // unverified for now → retried in the background
+      return c;
     }
     let data = res.data;
     if(!data){
@@ -207,6 +222,21 @@ const Cloud = {
     return this.profile;
   },
 
+  /* the app was opened with the cached account because the server was slow:
+     verify in the background and switch to the live account when it answers */
+  async verifyInBackground(){
+    if(!this.offline || !this.client || (typeof navigator!=='undefined' && !navigator.onLine)) return false;
+    const sess=await this.session().catch(()=>null);
+    if(!sess || !sess.user) return false;          // really signed out → stays in offline mode
+    const p=await this.loadAccount();
+    if(p && !this.offline){
+      try{ Nav.buildSidebar(); Nav.applyBrand(); }catch(e){}
+      return true;
+    }
+    if(this.blocked && window.Auth){ Auth.show(); if(window.U) U.toast(U.t('districtInactive'),'error'); }
+    return false;
+  },
+
   /* a DIFFERENT district signing in on the same phone must never see (or
      upload!) the previous district's local data → wipe it first */
   async guardDistrict(){
@@ -225,13 +255,14 @@ const Cloud = {
      Only registered provinces/districts are offered (super admin).
      Exception: the very first account (nothing registered yet) may
      enter free text — its rows are created automatically. */
-  async register({fullName, phone, email, password, province, district}){
+  async register({fullName, phone, email, password, province, district, joinCode}){
     const missing=[];
     if(!fullName) missing.push(U.t('fullName'));
     if(!email) missing.push(U.t('email'));
     if(!password) missing.push(U.t('password'));
     if(!province) missing.push(U.t('province'));
     if(!district) missing.push(U.t('district'));
+    if(!joinCode || !String(joinCode).trim()) missing.push(U.t('joinCode'));
     if(missing.length) return {error:{message:'MISSING_FIELDS'}};
     /* the district must have a free place BEFORE the auth user is created */
     try{
@@ -240,21 +271,25 @@ const Cloud = {
       if(!hit) return {error:{message:'DISTRICT_NOT_REGISTERED'}};
       if(hit.full) return {error:{message:'DISTRICT_FULL'}};
     }catch(e){}
+    /* the secret district code is checked by the server BEFORE the auth user exists */
+    const chk=await this.checkJoinCode(province, district, joinCode);
+    if(chk!=='OK') return {error:{message: chk==='NETWORK' ? 'Failed to fetch' : chk}};
     const {data, error} = await this.client.auth.signUp({
       email, password,
-      options:{ data:{ full_name:fullName, phone:phone||'', province_ps:province, district_ps:district } }
+      options:{ data:{ full_name:fullName, phone:phone||'', province_ps:province, district_ps:district, join_code:String(joinCode).trim() } }
     });
     if(error) return {error};
     if(!data || !data.session) return {needsConfirm:true};
-    const profile = await this.finishRegistration(fullName, phone, province, district);
+    const profile = await this.finishRegistration(fullName, phone, province, district, joinCode);
     if(profile.error) return profile;
     return {profile};
   },
 
-  async finishRegistration(fullName, phone, province, district){
+  async finishRegistration(fullName, phone, province, district, joinCode){
     const {data, error} = await this.client.rpc('complete_registration', {
       p_full_name: fullName, p_phone: phone||'',
       p_province_ps: province, p_district_ps: district,
+      p_join_code: String(joinCode||'').trim(),
       p_max: this.maxAccounts()     /* informational only — the server enforces its own limit */
     });
     if(error) return {error};
@@ -336,6 +371,20 @@ const Cloud = {
       const out={}; data.forEach(r=>{ out[r.district_id]={accounts:Number(r.accounts)||0, max:Number(r.max_accounts)||8}; });
       return out;
     }catch(e){ return {}; }
+  },
+
+  /* ask the server (before the auth user is created) whether the secret district code
+     is right: 'OK' | 'JOIN_CODE_INVALID' | 'TOO_MANY_ATTEMPTS' | 'DISTRICT_FULL' | … | 'NETWORK' */
+  async checkJoinCode(province, district, code){
+    try{
+      const {data, error} = await withTimeout(this.client.rpc('check_join_code',{p_province_ps:province, p_district_ps:district, p_code:code||''}), 12000);
+      if(error) return 'NETWORK';
+      return String(data||'NETWORK');
+    }catch(e){ return 'NETWORK'; }
+  },
+  async regenerateDistrictCode(districtId){
+    const {data, error} = await this.client.rpc('regenerate_district_code',{p_district:districtId});
+    return error ? {error} : {code:data};
   },
 
   async updateProvince(id, patch){
