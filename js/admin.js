@@ -105,6 +105,13 @@ const SuperDashboard = {
         '<td>'+U.escapeHtml(this._pName({name_ps:d.province_ps, name_fa:d.province_fa}))+'</td>'+
         '<td><b>'+U.escapeHtml(this._pName(d))+'</b></td>'+
         '<td class="tc"><span class="badge '+(Number(d.accounts)>=max?'b-red':'b-green')+'">'+U.num(d.accounts)+' / '+U.num(max)+'</span></td>'+
+        '<td class="cell-code">'+
+          (d.join_code?'<span class="code-chip">'+U.escapeHtml(d.join_code)+'</span>':'—')+
+          '<div class="row-actions" style="justify-content:center;margin-top:6px">'+
+            '<button type="button" class="icon-btn sm" data-dist-copy="'+U.escapeHtml(d.id)+'" title="'+U.t('copy')+'">'+U.icon('copy')+'</button>'+
+            '<button type="button" class="icon-btn sm" data-dist-share="'+U.escapeHtml(d.id)+'" title="'+U.t('shareCode')+'">'+U.icon('message')+'</button>'+
+            '<button type="button" class="icon-btn sm" data-dist-regen="'+U.escapeHtml(d.id)+'" title="'+U.t('newCode')+'">'+U.icon('refresh')+'</button>'+
+          '</div></td>'+
         '<td>'+U.num(enNum(d.credit_limit))+' '+U.t('afghani')+'</td>'+
         '<td>'+U.escapeHtml(d.restrictions||'—')+'</td>'+
         '<td class="tc">'+this._status(act)+(d.province_active===false?'<div class="muted small">'+U.t('provinceInactiveNote')+'</div>':'')+'</td>'+
@@ -115,8 +122,8 @@ const SuperDashboard = {
       '<div class="card-body">'+
         '<div class="table-wrap"><table class="data"><thead><tr>'+
           '<th>'+U.t('provinceName')+'</th><th>'+U.t('districtName')+'</th><th class="tc">'+U.t('accountsCount')+'</th>'+
-          '<th>'+U.t('creditLimit')+'</th><th>'+U.t('restrictions')+'</th><th class="tc">'+U.t('status')+'</th><th class="tc">'+U.t('actions')+'</th>'+
-        '</tr></thead><tbody>'+(rows||'<tr><td colspan="7" class="muted">'+U.t('noData')+'</td></tr>')+'</tbody></table></div>'+
+          '<th class="tc">'+U.t('districtCode')+'</th><th>'+U.t('creditLimit')+'</th><th>'+U.t('restrictions')+'</th><th class="tc">'+U.t('status')+'</th><th class="tc">'+U.t('actions')+'</th>'+
+        '</tr></thead><tbody>'+(rows||'<tr><td colspan="8" class="muted">'+U.t('noData')+'</td></tr>')+'</tbody></table></div>'+
         '<div class="flex flex-wrap mt-2">'+
           '<div class="field"><select id="distProv" aria-label="'+U.t('provinceName')+'">'+
             '<option value="">'+U.t('selectProvince')+'</option>'+
@@ -228,6 +235,27 @@ const SuperDashboard = {
       const r=await Cloud.deleteProvince(p.id);
       if(r.error) return fail(r);
       U.toast(U.t('deleted'),'success'); this.render(view);
+    }));
+
+    /* district join code: copy / share on WhatsApp / renew */
+    const codeText=(d)=>U.t('shareCodeText')+'\n'+this._pName({name_ps:d.province_ps,name_fa:d.province_fa})+' — '+this._pName(d)+'\n'+U.t('districtCode')+': '+d.join_code+'\n'+location.origin;
+    view.querySelectorAll('[data-dist-copy]').forEach(b=>b.addEventListener('click', async ()=>{
+      const d=this._ctx.districts.find(x=>x.id===b.dataset.distCopy); if(!d||!d.join_code) return;
+      try{ await navigator.clipboard.writeText(d.join_code); }
+      catch(e){ const t=document.createElement('textarea'); t.value=d.join_code; document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); }catch(_){} t.remove(); }
+      U.toast(U.t('codeCopied'),'success');
+    }));
+    view.querySelectorAll('[data-dist-share]').forEach(b=>b.addEventListener('click', ()=>{
+      const d=this._ctx.districts.find(x=>x.id===b.dataset.distShare); if(!d||!d.join_code) return;
+      window.open('https://wa.me/?text='+encodeURIComponent(codeText(d)),'_blank','noopener');
+    }));
+    view.querySelectorAll('[data-dist-regen]').forEach(b=>b.addEventListener('click', async ()=>{
+      const d=this._ctx.districts.find(x=>x.id===b.dataset.distRegen); if(!d) return;
+      const ok=await UI.confirm({danger:true, title:U.t('newCode'), msg:'<b>'+U.escapeHtml(this._pName(d))+'</b><br><span class="muted small">'+U.t('regenCodeConfirm')+'</span>', okLabel:U.t('newCode')});
+      if(!ok) return;
+      const r=await Cloud.regenerateDistrictCode(d.id);
+      if(r.error) return fail(r);
+      U.toast(U.t('codeRenewed'),'success'); this.render(view);
     }));
 
     /* districts: full settings (names, active, account limit, credit, restrictions) */
