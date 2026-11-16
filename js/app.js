@@ -16,17 +16,19 @@ window.App = {
     await this.migrateStudentStats();
     await this.migratePersonFields();
     U.setLang(Settings.get().language||'ps');
-    /* cloud: connect Supabase + restore session (no-op in local mode) */
-    let cloudReady=true;
+    /* if the start-up is still busy after 15 s, say so instead of showing an empty page */
+    const wd=setTimeout(()=>{ if(App.booting) App.showSlowBoot(); }, 15000);
+    /* cloud: connect Supabase + restore session (no-op in local mode).
+       The account load is time-limited (falls back to the cached account) and the
+       data sync runs AFTER the first screen is on the display. */
+    let cloudReady=true, bgAccount=null;
     try{
       if(window.Cloud && Cloud.init()){
         const p=await Cloud.loadAccount();
         if(!p){ cloudReady=false; }      // no session → auth screen
         else{
           await Cloud.guardDistrict();        /* other district on this phone → wipe old data */
-          if(window.Sync) await Sync.startup();   /* pull first … */
-          /* … then make sure every account is a member of the district (علمي غړي) */
-          if(window.ensureAccountMember) await ensureAccountMember(p);
+          bgAccount=p;
         }
       }
     }catch(e){ console.warn('[app] cloud boot', e); }
@@ -54,6 +56,7 @@ window.App = {
       }
     }catch(e){}
     this.booting=false;
+    clearTimeout(wd);
     if(!cloudReady){
       if(window.Auth) Auth.show();
       if(window.Cloud && Cloud.blocked && window.U) U.toast(U.t('districtInactive'),'error');
@@ -64,6 +67,35 @@ window.App = {
     } else {
       location.hash='#/dashboard';
     }
+    if(bgAccount) this.startBackground(bgAccount);
+  },
+
+  /* network work after the first screen: pull/push data, then (only after the first
+     pull, so nothing is overwritten) make sure every account has its member row;
+     also re-verify the account when the app was opened from the cache */
+  startBackground(p){
+    try{
+      const chain = window.Sync ? Sync.startup() : Promise.resolve();
+      Promise.resolve(chain)
+        .then(()=>{ if(window.ensureAccountMember) return ensureAccountMember(p); })
+        .then(()=>{ if(window.Sync && Sync.reconcileAccounts) return Sync.reconcileAccounts(); })
+        .catch(e=>console.warn('[app] background sync', e));
+      if(window.Cloud && Cloud.offline){
+        const retry=()=>Cloud.verifyInBackground().then(ok=>{ if(ok) this.startBackground(Cloud.profile); }).catch(()=>{});
+        setTimeout(retry, 8000);
+        window.addEventListener('online', ()=>setTimeout(retry, 1500));
+      }
+    }catch(e){ console.warn('[app] startBackground', e); }
+  },
+
+  showSlowBoot(){
+    const v=document.getElementById('view');
+    const ar=document.getElementById('auth-root');
+    if(!v || (ar && !ar.hidden)) return;
+    v.innerHTML='<div class="empty" style="padding:60px 20px"><div class="spinner"></div>'+
+      '<h3>'+U.t('slowConnection')+'</h3><p class="muted">'+U.t('slowConnectionHint')+'</p>'+
+      '<button type="button" class="btn btn-primary" id="bootRetry">'+U.icon('refresh')+' '+U.t('retry')+'</button></div>';
+    const b=document.getElementById('bootRetry'); if(b) b.addEventListener('click',()=>location.reload());
   },
 
   /* one-time migration: old single school `type` (دولتي/خصوصي/ابتدایي/متوسطه/لیسه/نور)
