@@ -69,10 +69,67 @@ const SuperDashboard = {
   },
   _rowActions(kind, id, active){
     return '<div class="row-actions">'+
+      (kind==='dist' ? '<button type="button" class="icon-btn sm" data-dist-accts="'+U.escapeHtml(id)+'" title="'+U.t('accountsOfDistrict')+'">'+U.icon('users')+'</button>' : '')+
       '<button type="button" class="icon-btn sm" data-'+kind+'-edit="'+U.escapeHtml(id)+'" title="'+U.t('edit')+'">'+U.icon('edit')+'</button>'+
       '<button type="button" class="icon-btn sm" data-'+kind+'-toggle="'+U.escapeHtml(id)+'" title="'+U.t(active?'deactivate':'activate')+'">'+U.icon(active?'shield':'shieldCheck')+'</button>'+
       '<button type="button" class="icon-btn sm danger" data-'+kind+'-del="'+U.escapeHtml(id)+'" title="'+U.t('delete')+'">'+U.icon('trash')+'</button>'+
     '</div>';
+  },
+
+  /* ---------------- accounts of one district ---------------- */
+  async openAccounts(view, districtId){
+    const d=this._ctx.districts.find(x=>x.id===districtId); if(!d) return;
+    const m=UI.modal({
+      title: U.t('accountsOfDistrict')+' — '+this._pName(d), icon:'users', size:'lg',
+      body:'<div id="acctBody"><div class="spinner"></div></div>',
+      foot:'<button type="button" class="btn btn-outline" data-act="close">'+U.t('close')+'</button>'
+    });
+    m.el.querySelector('[data-act=close]').addEventListener('click', ()=>m.close());
+    const paint=async()=>{
+      const box=m.el.querySelector('#acctBody'); if(!box) return;
+      const r=await Cloud.adminListAccounts(districtId);
+      if(r.error){ box.innerHTML='<div class="muted">'+U.escapeHtml(r.error.message||'')+'</div>'; return; }
+      const rows=r.accounts.map(a=>
+        '<tr><td><b>'+U.escapeHtml(a.full_name||'')+'</b>'+(a.role==='super'?' <span class="badge b-blue">super</span>':'')+'</td>'+
+        '<td dir="ltr" style="text-align:start">'+U.escapeHtml(a.email||'')+'</td>'+
+        '<td dir="ltr" style="text-align:start">'+U.escapeHtml(a.phone||'')+'</td>'+
+        '<td>'+U.escapeHtml(U.fmtDate(a.created_at))+'</td>'+
+        '<td class="tc">'+U.num(a.records_count)+'</td>'+
+        '<td class="tc">'+(a.role==='super' ? '—' :
+          '<button type="button" class="icon-btn sm danger" data-acct-del="'+U.escapeHtml(a.id)+'" data-name="'+U.escapeHtml(a.full_name||a.email||'')+'" title="'+U.t('deleteAccount')+'">'+U.icon('trash')+'</button>')+'</td></tr>').join('');
+      box.innerHTML='<div class="muted small mb-2">'+U.t('accountsNote')+'</div>'+
+        '<div class="table-wrap"><table class="data"><thead><tr><th>'+U.t('fullName')+'</th><th>'+U.t('email')+'</th><th>'+U.t('phone')+'</th><th>'+U.t('createdAt')+'</th><th class="tc">'+U.t('recordsCount')+'</th><th class="tc">'+U.t('actions')+'</th></tr></thead><tbody>'+
+        (rows||'<tr><td colspan="6" class="muted">'+U.t('noData')+'</td></tr>')+'</tbody></table></div>';
+      box.querySelectorAll('[data-acct-del]').forEach(btn=>btn.addEventListener('click', async ()=>{
+        const name=btn.dataset.name;
+        /* own dialog (not UI.confirm): the checkbox must be read BEFORE the dialog closes */
+        const choice=await new Promise(resolve=>{
+          let done=false;
+          const cm=UI.modal({
+            title:U.t('deleteAccount'), icon:'trash', size:'sm',
+            body:'<div class="confirm-ico danger">'+U.icon('trash')+'</div>'+
+                 '<div class="confirm-msg"><b>'+U.escapeHtml(name)+'</b><br><span class="muted small">'+U.t('deleteAccountNote')+'</span></div>'+
+                 '<label class="chk" style="margin-top:14px;justify-content:center"><input type="checkbox" id="alsoData"> '+U.t('alsoDeleteData')+'</label>',
+            foot:'<button type="button" class="btn btn-outline" data-a="no">'+U.t('cancel')+'</button>'+
+                 '<button type="button" class="btn btn-danger" data-a="yes">'+U.icon('trash')+' '+U.t('deleteAccount')+'</button>',
+            onClose:()=>{ if(!done){ done=true; resolve(null); } }
+          });
+          cm.el.querySelector('[data-a=no]').addEventListener('click', ()=>cm.close());
+          cm.el.querySelector('[data-a=yes]').addEventListener('click', ()=>{
+            const also=!!cm.el.querySelector('#alsoData').checked;
+            if(!done){ done=true; resolve({also}); }
+            cm.close();
+          });
+        });
+        if(!choice) return;
+        const res=await Cloud.adminDeleteAccount(btn.dataset.acctDel, choice.also);
+        if(res.error){ U.toast(res.error.message||U.t('error'),'error'); return; }
+        U.toast(U.t('accountDeleted'),'success');
+        await paint();
+        this.render(view);
+      }));
+    };
+    paint();
   },
 
   /* ---------------- provinces ---------------- */
@@ -236,6 +293,9 @@ const SuperDashboard = {
       if(r.error) return fail(r);
       U.toast(U.t('deleted'),'success'); this.render(view);
     }));
+
+    /* accounts of a district: list + remove (with its data if wanted) */
+    view.querySelectorAll('[data-dist-accts]').forEach(b=>b.addEventListener('click', ()=>this.openAccounts(view, b.dataset.distAccts)));
 
     /* district join code: copy / share on WhatsApp / renew */
     const codeText=(d)=>U.t('shareCodeText')+'\n'+this._pName({name_ps:d.province_ps,name_fa:d.province_fa})+' — '+this._pName(d)+'\n'+U.t('districtCode')+': '+d.join_code+'\n'+location.origin;
