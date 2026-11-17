@@ -43,6 +43,7 @@ const Cloud = {
   state: 'local',   // 'local' | 'cloud'
   online: (typeof navigator!=='undefined') ? navigator.onLine : true,
   offline: false,   // true while the app runs on the cached account without a session
+  unverified: false,  // opened from the cached account, not yet confirmed by the server
   blocked: '',      // 'DISTRICT_INACTIVE' | 'PROVINCE_INACTIVE' when sign-in was refused
 
   configured(){ return !!(CFG.supabaseUrl && CFG.supabaseAnonKey); },
@@ -110,6 +111,40 @@ const Cloud = {
   /* offline use: re-open the app with the cached account (no session, no network).
      The cached role is NEVER trusted → always a normal member (the super admin
      pages need the server anyway). */
+  /* is a sign-in session stored on this device? (no network needed to know) */
+  hasLocalSession(){
+    try{
+      const raw=localStorage.getItem('tdp_auth'); if(!raw) return false;
+      const o=JSON.parse(raw); return !!(o && (o.access_token || (o.currentSession && o.currentSession.access_token)));
+    }catch(e){ return false; }
+  },
+  /* FAST START: signed in before + cached account → open the app at once with it and
+     verify with the server in the background. (A cached super admin is NOT opened
+     this way — the super pages need the server anyway.) */
+  bootOptimistic(){
+    try{
+      if(!this.hasLocalSession() || !this.hasAccountOnDevice()) return null;
+      const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+      if(!c || !c.profile || c.profile.role==='super') return null;
+      this.profile=Object.assign({}, c.profile, {role:'member'});
+      this.district=c.district||null;
+      this.offline=false;
+      this.unverified=true;
+      return this.profile;
+    }catch(e){ return null; }
+  },
+  /* background check after a fast start: live account, or back to the sign-in screen */
+  async verifyAccount(){
+    const p=await this.loadAccount();
+    this.unverified=false;
+    if(p){ try{ Nav.buildSidebar(); Nav.applyBrand(); }catch(e){} return p; }
+    if(window.Auth){
+      /* a banner stays on the card (a toast would disappear): say WHY the app is locked */
+      Auth.show(this.blocked ? {notice:U.t('districtInactive')} : undefined);
+    }
+    return null;
+  },
+
   enterOffline(){
     try{
       const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
@@ -385,6 +420,16 @@ const Cloud = {
   async regenerateDistrictCode(districtId){
     const {data, error} = await this.client.rpc('regenerate_district_code',{p_district:districtId});
     return error ? {error} : {code:data};
+  },
+
+  /* super admin: accounts of a district / remove an account (optionally with its data) */
+  async adminListAccounts(districtId){
+    const {data, error} = await this.client.rpc('admin_list_accounts',{p_district:districtId});
+    return error ? {error} : {accounts:data||[]};
+  },
+  async adminDeleteAccount(userId, deleteData){
+    const {error} = await this.client.rpc('admin_delete_account',{p_user:userId, p_delete_data:!!deleteData});
+    return error ? {error} : {ok:true};
   },
 
   async updateProvince(id, patch){
