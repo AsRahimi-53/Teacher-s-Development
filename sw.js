@@ -1,16 +1,19 @@
 /* =====================================================================
    sw.js — PWA service worker (offline-first app shell)
    ---------------------------------------------------------------------
-   • precaches the full app shell (relative paths — subpath safe)
-   • navigations: network-first, fall back to cached index (offline)
-   • everything else: cache-first, then network, cache the result
+   • precaches the app shell (relative paths — subpath safe)
+   • CACHE-FIRST for the whole shell → the app opens instantly, even on a very slow
+     or missing network; a new release replaces the whole cache at once when
+     VERSION is raised (never a mix of old and new files)
+   • big, rarely used libraries (Excel) are NOT precached: they are loaded on first
+     use (or quietly in the background) and then cached
    App DATA always lives in IndexedDB locally and syncs to Supabase —
    the service worker never touches user data.
    ===================================================================== */
 'use strict';
 
 /* bump VERSION on every release: it renames the caches, the old ones are deleted */
-const VERSION = 'tdp-v9';
+const VERSION = 'tdp-v11';
 const SHELL_CACHE = VERSION + '-shell';
 const RUNTIME_CACHE = VERSION + '-runtime';
 const NET_TIMEOUT = 4000;   // ms — on a slow network fall back to the cached copy
@@ -61,7 +64,6 @@ const APP_SHELL = [
   './js/backup.js',
   './js/app.js',
   './lib/supabase.js',
-  './lib/xlsx.full.min.js',
   './config.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -71,7 +73,8 @@ const APP_SHELL = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(SHELL_CACHE)
-      .then((c) => Promise.allSettled(APP_SHELL.map((u) => c.add(u))))
+      /* cache:'reload' → always the fresh file of this release (never an old HTTP-cache copy) */
+      .then((c) => Promise.allSettled(APP_SHELL.map((u) => c.add(new Request(u, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
@@ -90,25 +93,16 @@ self.addEventListener('message', (e) => {
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
-/* network first (fresh code reaches users) with a timeout, cache as fallback */
-function networkFirst(req, cacheName, timeout) {
-  return new Promise((resolve) => {
-    let done = false;
-    const fromCache = () => caches.match(req).then((hit) => hit || caches.match('./index.html'));
-    const timer = setTimeout(() => {
-      if (done) return;
-      caches.match(req).then((hit) => { if (hit && !done) { done = true; resolve(hit); } });
-    }, timeout);
-    fetch(req).then((res) => {
-      clearTimeout(timer);
+/* cache first, then network (and cache the answer) */
+function cacheFirst(req, key) {
+  return caches.match(key || req).then((hit) => {
+    if (hit) return hit;
+    return fetch(req).then((res) => {
       if (res && res.status === 200 && (res.type === 'basic' || res.type === 'cors')) {
         const copy = res.clone();
-        caches.open(cacheName).then((c) => c.put(req, copy)).catch(() => {});
+        caches.open(SHELL_CACHE).then((c) => c.put(key || req, copy)).catch(() => {});
       }
-      if (!done) { done = true; resolve(res); }
-    }).catch(() => {
-      clearTimeout(timer);
-      if (!done) { done = true; fromCache().then((hit) => resolve(hit || Response.error())); }
+      return res;
     });
   });
 }
@@ -119,36 +113,16 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;       // Supabase etc. never touched
 
-  /* 1) page navigations → network first, offline fallback to the cached shell */
+  /* page navigations → the cached index.html at once (works offline; a paused or
+     failing host can never replace the app with an error page) */
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(SHELL_CACHE).then((c) => c.put('./index.html', copy)).catch(() => {});
-          }
-          return res;
-        })
+      cacheFirst(new Request('./index.html'), './index.html')
         .catch(() => caches.match('./index.html'))
     );
     return;
   }
 
-  /* 2) big, rarely changing libraries and icons → cache first */
-  if (url.pathname.indexOf('/lib/') >= 0 || url.pathname.indexOf('/icons/') >= 0) {
-    e.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-        if (res && res.status === 200) {
-          const copy = res.clone();
-          caches.open(SHELL_CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        }
-        return res;
-      }))
-    );
-    return;
-  }
-
-  /* 3) app code (js / css / json) → network first so updates arrive at once */
-  e.respondWith(networkFirst(req, SHELL_CACHE, NET_TIMEOUT));
+  /* everything else: cache first (precached shell, libraries, icons) */
+  e.respondWith(cacheFirst(req).catch(() => Response.error()));
 });
